@@ -1,0 +1,14 @@
+langchain
+langchain-community
+langchain-core
+pypdf
+pymupdf
+sentence-transformers
+faiss-cpu
+chromadb
+langchain-groq
+python-dotenv
+fastapi
+uvicorn
+jinja2
+python-multipart
