@@ -6,6 +6,9 @@ from fastapi.responses import HTMLResponse
 from src.search import RAGSearch
 
 import os
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 # Create app

@@ -1,12 +1,17 @@
-langchain
-langchain-community
-langchain-core
+langchain==0.3.19
+langchain-community==0.3.18
+langchain-core==0.3.45
+langchain-groq==0.1.2
+
 pypdf
 pymupdf
-sentence-transformers
+
+sentence-transformers==2.2.2
+torch --index-url https://download.pytorch.org/whl/cpu
+
 faiss-cpu
-chromadb
-langchain-groq
+chromadb==0.4.24
+
 python-dotenv
 fastapi
 uvicorn
