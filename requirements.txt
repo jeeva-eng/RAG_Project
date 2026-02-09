@@ -7,7 +7,6 @@ python-multipart
 langchain
 langchain-core
 langchain-community
-langchain-groq
 
 pypdf
 pymupdf
@@ -17,4 +16,5 @@ chromadb
 
 sentence-transformers==2.6.1
 
-torch==2.2.2
+# CPU-only PyTorch
+torch==2.2.2+cpu
