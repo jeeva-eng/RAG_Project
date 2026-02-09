@@ -17,5 +17,4 @@ chromadb
 
 sentence-transformers==2.6.1
 
-torch==2.2.2+cpu
--f https://download.pytorch.org/whl/cpu
+torch==2.2.2
