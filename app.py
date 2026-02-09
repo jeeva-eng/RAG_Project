@@ -24,8 +24,14 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # Load RAG once (important for performance)
-rag = RAGSearch()
+rag = None
 chat_history = []
+
+def get_rag():
+    global rag
+    if rag is None:
+        rag = RAGSearch()
+    return rag
 
 
 # Home page
@@ -44,7 +50,8 @@ def search(request: Request, query: str = Form(...)):
 
     global chat_history
 
-    answer = rag.search_and_summarize(query, top_k=5)
+    rag_system = get_rag()
+    answer = rag_system.search_and_summarize(query, top_k=5)
 
     chat_history.append({
         "user": query,
