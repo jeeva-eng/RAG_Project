@@ -1,50 +1,66 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <title>RAG Assistant</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 
 <body>
 
-<div class="container">
+<div class="app">
 
-<h2>🤖 RAG Document Assistant</h2>
+    <!-- Header -->
+    <header>
+        🤖 RAG Document Assistant
+    </header>
 
-<<div class="chat-box" id="chat-box">
+    <!-- Chat Area -->
+    <div class="chat-box" id="chatBox">
 
-{% if chat %}
-    {% for msg in chat %}
+        {% if chat %}
+            {% for msg in chat %}
 
-        <div class="user-msg">
-            {{ msg.user }}
-        </div>
+                <!-- User Message -->
+                <div class="msg user">
+                    {{ msg.user }}
+                </div>
 
-        <div class="bot-msg">
-            {{ msg.bot }}
-        </div>
+                <!-- Bot Message -->
+                <div class="msg bot">
+                    {{ msg.bot }}
+                </div>
 
-    {% endfor %}
-{% endif %}
+            {% endfor %}
+        {% endif %}
+
+    </div>
+
+    <!-- Input Area -->
+    <form action="/search" method="post" class="chat-form">
+
+        <input
+            type="text"
+            name="query"
+            placeholder="Type your message..."
+            required
+            autocomplete="off"
+        >
+
+        <button type="submit">➤</button>
+
+    </form>
 
 </div>
 
 
-
-<form action="/search" method="post" class="chat-form">
-
-    <input
-        type="text"
-        name="query"
-        placeholder="Type your message..."
-        required
-    >
-
-    <button type="submit">Send</button>
-
-</form>
-
-</div>
+<!-- Auto Scroll -->
+<script>
+    const chatBox = document.getElementById("chatBox");
+    if (chatBox) {
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+</script>
 
 </body>
 </html>
