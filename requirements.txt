@@ -7,6 +7,9 @@ python-multipart
 langchain
 langchain-core
 langchain-community
+langchain-groq 
+
+numpy<2
 
 pypdf
 pymupdf
