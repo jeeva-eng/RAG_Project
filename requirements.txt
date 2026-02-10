@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 jinja2
+starlette
 python-dotenv
 python-multipart
 
