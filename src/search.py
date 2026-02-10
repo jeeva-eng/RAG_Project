@@ -62,22 +62,12 @@ class RAGSearch:
 
 
     def search_and_summarize(self, query: str, top_k: int = 5) -> str:
-
+        # ⬇️ Everything below needs to be indented (4 spaces or 1 tab)
+        
         # Search in vector DB
         results = self.vectorstore.query(query, top_k=top_k) or []
 
-        # Collect sources
-        sources = []
-
-        for r in results:
-            if r.get("metadata"):
-                src = r["metadata"].get("source", "Unknown")
-                sources.append(src)
-
-        source_text = ", ".join(set(sources))
-
-
-        # Collect text
+        # Collect text from metadata
         texts = [
             r["metadata"].get("text", "")
             for r in results
@@ -86,17 +76,23 @@ class RAGSearch:
 
         context = "\n\n".join(texts)
 
-        if not context:
-            return "No relevant documents found."
+        # Safety check (no weak answers)
+        if not context or len(context.strip()) < 50:
+            return "Sorry, this information is not in my documents."
 
-
-        # Strong prompt for long answers
+        # STRICT RAG PROMPT (NO HALLUCINATION)
         prompt = f"""
-You are a helpful AI tutor.
+You are a document-based assistant.
 
-Give a SHORT and CLEAR answer.
+Answer ONLY using the information in the Context.
 
 Rules:
+- Do NOT use your own knowledge
+- Do NOT guess
+- Do NOT add extra information
+- If answer is not in Context, say exactly:
+  "Sorry, this information is not in my documents."
+
 - Limit to 5–6 lines
 - Use simple English
 - No headings
@@ -104,11 +100,11 @@ Rules:
 - No conclusion
 - No extra examples
 
-Question:
-{query}
-
 Context:
 {context}
+
+Question:
+{query}
 
 Answer:
 """
@@ -116,6 +112,4 @@ Answer:
         # Call LLM
         response = self.llm.invoke(prompt)
 
-        final_answer = response.content.strip()
-
-        return final_answer
+        return response.content.strip()
