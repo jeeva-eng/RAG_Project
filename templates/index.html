@@ -11,23 +11,24 @@
 
 <h2>🤖 RAG Document Assistant</h2>
 
-<div class="chat-box">
+<<div class="chat-box" id="chat-box">
 
 {% if chat %}
     {% for msg in chat %}
 
         <div class="user-msg">
-            <b>You:</b> {{ msg.user }}
+            {{ msg.user }}
         </div>
 
         <div class="bot-msg">
-            <b>Bot:</b> {{ msg.bot }}
+            {{ msg.bot }}
         </div>
 
     {% endfor %}
 {% endif %}
 
 </div>
+
 
 
 <form action="/search" method="post" class="chat-form">
