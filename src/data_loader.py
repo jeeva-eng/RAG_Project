@@ -1,9 +1,14 @@
 from pathlib import Path
-from typing import List,Any
-from langchain_community.document_loaders import PyPDFLoader,TextLoader,CSVLoader
-from langchain_community.document_loaders import Docx2txtLoader
+from typing import List, Any
+import pandas as pd
+
+from langchain_community.document_loaders import (
+    PyPDFLoader,
+    TextLoader,
+)
 from langchain_community.document_loaders.excel import UnstructuredExcelLoader
-from langchain_community.document_loaders import JSONLoader
+from langchain_core.documents import Document
+
 
 def load_all_documents(data_dir: str) -> List[Any]:
 
@@ -40,17 +45,27 @@ def load_all_documents(data_dir: str) -> List[Any]:
         except Exception as e:
             print(f"[ERROR] Failed to load TXT {txt_file}: {e}")
 
-    # ---------------- CSV ----------------
+    # ---------------- CSV (MEMORY SAFE FIX) ----------------
     csv_files = list(data_path.glob('**/*.csv'))
     print(f"[DEBUG] Found {len(csv_files)} CSV files: {[str(f) for f in csv_files]}")
 
     for csv_file in csv_files:
         print(f"[DEBUG] Loading CSV: {csv_file}")
         try:
-            loader = CSVLoader(str(csv_file))
-            loaded = loader.load()
-            print(f"[DEBUG] Loaded {len(loaded)} CSV docs from {csv_file}")
-            documents.extend(loaded)
+            # 🔥 CRITICAL FIX: Limit rows to prevent OOM
+            df = pd.read_csv(csv_file).head(1000)
+
+            # Convert dataframe to single large text block
+            text_content = df.to_string(index=False)
+
+            doc = Document(
+                page_content=text_content,
+                metadata={"source": str(csv_file)}
+            )
+
+            print(f"[DEBUG] Loaded 1000 rows from {csv_file} as 1 document")
+            documents.append(doc)
+
         except Exception as e:
             print(f"[ERROR] Failed to load CSV {csv_file}: {e}")
 
@@ -68,4 +83,5 @@ def load_all_documents(data_dir: str) -> List[Any]:
         except Exception as e:
             print(f"[ERROR] Failed to load Excel {xlsx_file}: {e}")
 
+    print(f"[INFO] Total documents loaded: {len(documents)}")
     return documents

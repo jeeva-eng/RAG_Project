@@ -5,7 +5,8 @@ starlette
 python-dotenv
 python-multipart
 itsdangerous
-
+unstructured
+openpyxl
 langchain
 langchain-core
 langchain-community
