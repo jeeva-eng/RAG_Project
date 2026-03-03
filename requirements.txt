@@ -11,7 +11,7 @@ langchain
 langchain-core
 langchain-community
 langchain-groq
-
+pandas
 numpy<2
 
 pypdf
