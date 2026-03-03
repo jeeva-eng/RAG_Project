@@ -7,6 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from src.search import RAGSearch
 
+
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

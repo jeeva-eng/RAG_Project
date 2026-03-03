@@ -1,6 +1,9 @@
 import os
 from dotenv import load_dotenv
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_PATH = os.path.join(BASE_DIR, "data")
+
 from src.vector_db import FaissVectorStore
 from src.data_loader import load_all_documents
 from langchain_groq import ChatGroq
@@ -31,7 +34,7 @@ class RAGSearch:
 
             print("[INFO] No existing index found. Building vector store...")
 
-            documents = load_all_documents("data")
+            documents = load_all_documents(DATA_PATH)
 
             if not documents:
                 raise ValueError("No documents found in data folder.")
