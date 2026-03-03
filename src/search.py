@@ -22,7 +22,7 @@ class RAGSearch:
     ):
 
         # --------------------------------------------------
-        # VECTOR STORE
+        # VECTOR STORE (LOAD ONLY - NEVER BUILD)
         # --------------------------------------------------
 
         self.vectorstore = FaissVectorStore(
@@ -30,23 +30,17 @@ class RAGSearch:
             embedding_model=embedding_model,
         )
 
+        # 🚨 HARD FAIL if index missing
         if not self.vectorstore._index_exists():
+            raise RuntimeError(
+                "FAISS index not found. Build it locally before deploying."
+            )
 
-            print("[INFO] No existing index found. Building vector store...")
-
-            documents = load_all_documents(DATA_PATH)
-
-            if not documents:
-                raise ValueError("No documents found in data folder.")
-
-            self.vectorstore.build_from_documents(documents)
-
-        else:
-            print("[INFO] Loading existing vector store...")
-            self.vectorstore.load()
+        self.vectorstore.load()
+        print("[INFO] FAISS index loaded successfully.")
 
         # --------------------------------------------------
-        # SOURCES WITH ICONS
+        # SOURCES
         # --------------------------------------------------
 
         unique_files = {
@@ -85,7 +79,7 @@ class RAGSearch:
         groq_api_key = os.getenv("GROQ_API_KEY")
 
         if not groq_api_key:
-            raise ValueError("❌ GROQ_API_KEY not found in environment variables")
+            raise ValueError("❌ GROQ_API_KEY not found")
 
         self.llm = ChatGroq(
             groq_api_key=groq_api_key,

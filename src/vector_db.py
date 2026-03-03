@@ -80,7 +80,7 @@ class FaissVectorStore:
         metadatas = [
             {
                 "text": chunk.page_content,
-                "source": chunk.metadata.get("source", "Unknown"),
+                "source": os.path.basename(chunk.metadata.get("source", "Unknown")),
                 "page": chunk.metadata.get("page", None),
             }
             for chunk in chunks
