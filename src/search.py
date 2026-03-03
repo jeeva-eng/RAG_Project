@@ -3,11 +3,9 @@ from dotenv import load_dotenv
 
 from src.vector_db import FaissVectorStore
 from src.data_loader import load_all_documents
-
 from langchain_groq import ChatGroq
 
 
-# Load .env file
 load_dotenv()
 
 
@@ -17,57 +15,101 @@ class RAGSearch:
         self,
         persist_dir: str = "faiss_store",
         embedding_model: str = "all-MiniLM-L6-v2",
-        llm_model: str = "llama-3.1-8b-instant"
+        llm_model: str = "llama-3.1-8b-instant",
     ):
 
-        # Initialize vector store
+        # --------------------------------------------------
+        # VECTOR STORE
+        # --------------------------------------------------
+
         self.vectorstore = FaissVectorStore(
-            persist_dir,
-            embedding_model
+            persist_dir=persist_dir,
+            embedding_model=embedding_model,
         )
 
-        # Check if FAISS exists
-        faiss_path = os.path.join(persist_dir, "faiss.index")
-        meta_path = os.path.join(persist_dir, "metadata.pkl")
+        if not self.vectorstore._index_exists():
 
-        # Build if not exists
-        if not (os.path.exists(faiss_path) and os.path.exists(meta_path)):
+            print("[INFO] No existing index found. Building vector store...")
 
-            print("[INFO] Building vector store...")
+            documents = load_all_documents("data")
 
-            docs = load_all_documents("data")
-            self.vectorstore.build_from_documents(docs)
+            if not documents:
+                raise ValueError("No documents found in data folder.")
+
+            self.vectorstore.build_from_documents(documents)
 
         else:
-
-            print("[INFO] Loading vector store...")
-
+            print("[INFO] Loading existing vector store...")
             self.vectorstore.load()
 
-        # Load API key safely
+        # --------------------------------------------------
+        # SOURCES WITH ICONS
+        # --------------------------------------------------
+
+        unique_files = {
+            os.path.basename(meta.get("source", "Unknown"))
+            for meta in self.vectorstore.metadata
+            if meta
+        }
+
+        def get_icon(filename: str):
+            ext = filename.split(".")[-1].lower()
+
+            if ext == "pdf":
+                return "📄"
+            elif ext in ["csv", "xlsx", "xls"]:
+                return "📊"
+            elif ext == "txt":
+                return "📘"
+            else:
+                return "📁"
+
+        self.sources = sorted(
+            [
+                {
+                    "icon": get_icon(file),
+                    "name": file
+                }
+                for file in unique_files
+            ],
+            key=lambda x: x["name"].lower()
+        )
+
+        # --------------------------------------------------
+        # LLM INITIALIZATION
+        # --------------------------------------------------
+
         groq_api_key = os.getenv("GROQ_API_KEY")
 
         if not groq_api_key:
             raise ValueError("❌ GROQ_API_KEY not found in environment variables")
 
-        # Initialize LLM (increase max tokens)
         self.llm = ChatGroq(
             groq_api_key=groq_api_key,
             model_name=llm_model,
             temperature=0.2,
-            max_tokens=300   # 👈 IMPORTANT
+            max_tokens=300,
         )
 
         print(f"[INFO] Groq LLM initialized: {llm_model}")
 
+    # --------------------------------------------------
+    # PUBLIC METHODS
+    # --------------------------------------------------
 
-    def search_and_summarize(self, query: str, top_k: int = 5) -> str:
-        # ⬇️ Everything below needs to be indented (4 spaces or 1 tab)
-        
-        # Search in vector DB
+    def get_sources(self):
+        return self.sources
+
+    def search_and_summarize(self, query: str, top_k: int = 20) -> str:
+
+        if not query.strip():
+            return "Please enter a valid question."
+
         results = self.vectorstore.query(query, top_k=top_k) or []
 
-        # Collect text from metadata
+        if not results:
+            return "Sorry, this information is not in my documents."
+
         texts = [
             r["metadata"].get("text", "")
             for r in results
@@ -76,29 +118,20 @@ class RAGSearch:
 
         context = "\n\n".join(texts)
 
-        # Safety check (no weak answers)
-        if not context or len(context.strip()) < 50:
+        if not context.strip():
             return "Sorry, this information is not in my documents."
 
-        # STRICT RAG PROMPT (NO HALLUCINATION)
         prompt = f"""
 You are a document-based assistant.
 
-Answer ONLY using the information in the Context.
-
-Rules:
-- Do NOT use your own knowledge
-- Do NOT guess
-- Do NOT add extra information
+Strict Rules:
+- Answer ONLY using the Context below.
+- Do NOT use outside knowledge.
+- Do NOT guess.
 - If answer is not in Context, say exactly:
   "Sorry, this information is not in my documents."
-
-- Limit to 5–6 lines
-- Use simple English
-- No headings
-- No long explanations
-- No conclusion
-- No extra examples
+- Keep answer within 5–6 lines.
+- Use simple English.
 
 Context:
 {context}
@@ -109,7 +142,10 @@ Question:
 Answer:
 """
 
-        # Call LLM
-        response = self.llm.invoke(prompt)
+        try:
+            response = self.llm.invoke(prompt)
+            return response.content.strip()
 
-        return response.content.strip()
+        except Exception as e:
+            print(f"[ERROR] LLM failed: {e}")
+            return "An error occurred while generating the answer."

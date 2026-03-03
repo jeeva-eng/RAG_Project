@@ -1,65 +1,182 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>RAG Assistant</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
+    <title>RAG Document Assistant</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background: #f4f6f9;
+        }
 
+        header {
+            background: linear-gradient(90deg, #2563eb, #1e40af);
+            color: white;
+            padding: 20px;
+            font-size: 22px;
+            font-weight: bold;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .container {
+            display: flex;
+            height: calc(100vh - 80px);
+        }
+
+        /* Chat Section */
+        .chat-section {
+            flex: 3;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .chat-box {
+            flex: 1;
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 20px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+
+        .user {
+            background: #2563eb;
+            color: white;
+            align-self: flex-end;
+        }
+
+        .bot {
+            background: #e5e7eb;
+            color: black;
+            align-self: flex-start;
+        }
+
+        .input-area {
+            display: flex;
+            margin-top: 15px;
+        }
+
+        .input-area input {
+            flex: 1;
+            padding: 12px;
+            border-radius: 25px;
+            border: 1px solid #ddd;
+            outline: none;
+        }
+
+        .input-area button {
+            margin-left: 10px;
+            padding: 12px 18px;
+            border-radius: 50%;
+            border: none;
+            background: #2563eb;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .input-area button:hover {
+            background: #1e40af;
+        }
+
+        /* Document Section */
+        .doc-section {
+            flex: 1;
+            padding: 20px;
+        }
+
+        .doc-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+
+        .doc-card h3 {
+            margin-top: 0;
+            color: #2563eb;
+        }
+
+        .doc-card ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .doc-card li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+
+        .doc-card li:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
 <body>
 
-<div class="app">
+<header>
+    🤖 RAG Document Assistant
+</header>
 
-    <!-- Header -->
-    <header>
-        🤖 RAG Document Assistant
-    </header>
+<div class="container">
 
-    <!-- Chat Area -->
-    <div class="chat-box" id="chatBox">
+    <!-- Chat Section -->
+    <div class="chat-section">
+        <div class="chat-box" id="chat-box">
 
-        {% if chat %}
-            {% for msg in chat %}
-
-                <!-- User Message -->
-                <div class="msg user">
-                    {{ msg.user }}
+            {% for message in chat %}
+                <div class="message user">
+                    {{ message.user }}
                 </div>
 
-                <!-- Bot Message -->
-                <div class="msg bot">
-                    {{ msg.bot }}
+                <div class="message bot">
+                    {{ message.bot }}
                 </div>
-
             {% endfor %}
-        {% endif %}
 
+        </div>
+
+        <!-- ✅ FIXED: name="query" -->
+        <form class="input-area" method="post" action="/search">
+            <input type="text" name="query" placeholder="Ask something about your documents..." required>
+            <button type="submit">➤</button>
+        </form>
     </div>
 
-    <!-- Input Area -->
-    <form action="/search" method="post" class="chat-form">
-
-        <input
-            type="text"
-            name="query"
-            placeholder="Type your message..."
-            required
-            autocomplete="off"
-        >
-
-        <button type="submit">➤</button>
-
-    </form>
-
+   <!-- Document Section -->
+<div class="doc-section">
+    <div class="doc-card">
+        <h3>📂 Available Documents</h3>
+        <ul>
+            {% for doc in sources %}
+                <li>
+                    <span style="margin-right:8px;">{{ doc.icon }}</span>
+                    {{ doc.name }}
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
 </div>
 
 
-<!-- Auto Scroll -->
+
+<!-- ✅ Auto Scroll to Bottom -->
 <script>
-    const chatBox = document.getElementById("chatBox");
-    if (chatBox) {
-        chatBox.scrollTop = chatBox.scrollHeight;
-    }
+    var chatBox = document.getElementById("chat-box");
+    chatBox.scrollTop = chatBox.scrollHeight;
 </script>
 
 </body>

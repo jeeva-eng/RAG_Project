@@ -4,6 +4,7 @@ jinja2
 starlette
 python-dotenv
 python-multipart
+itsdangerous
 
 langchain
 langchain-core
@@ -16,10 +17,9 @@ pypdf
 pymupdf
 
 faiss-cpu
-chromadb
 
-sentence-transformers==2.6.1
-itsdangerous
+sentence-transformers==2.7.0
+transformers==4.41.2
 
 torch==2.2.2+cpu
 --extra-index-url https://download.pytorch.org/whl/cpu
