@@ -1,26 +1,29 @@
-fastapi
-uvicorn
+fastapi==0.110.0
+uvicorn==0.29.0
 jinja2
 starlette
 python-dotenv
 python-multipart
 itsdangerous
-unstructured
-openpyxl
-langchain
-langchain-core
-langchain-community
-langchain-groq
-pandas
+
+pandas==1.5.3
 numpy<2
 
-pypdf
-pymupdf
+langchain==0.1.16
+langchain-community==0.0.32
+langchain-core==0.1.42
+langchain-openai==0.1.3
+
+pydantic==2.6.4
 
 faiss-cpu
-
 sentence-transformers==2.7.0
 transformers==4.41.2
 
 torch==2.2.2+cpu
 --extra-index-url https://download.pytorch.org/whl/cpu
+
+pypdf
+pymupdf
+openpyxl
+unstructured
