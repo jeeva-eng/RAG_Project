@@ -1,6 +1,6 @@
 import os
 import re
-
+import uvicorn
 from fastapi import FastAPI, Request, Form
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -57,11 +57,7 @@ def friendly_label(raw_label: str) -> str:
     return COLUMN_LABELS.get(key, raw_label.replace("_", " ").title())
 
 
-# --------------------------------------------------
-# ANALYTICAL QUERY DETECTOR
-# Detects duplicate/unique/missing queries so they
-# bypass format_answer() and display as-is
-# --------------------------------------------------
+
 ANALYTICAL_KEYWORDS = [
     "duplicate", "duplicates", "repeated",
     "unique", "distinct", "how many different",
@@ -74,11 +70,6 @@ def is_analytical_query(query: str) -> bool:
     return any(kw in q for kw in ANALYTICAL_KEYWORDS)
 
 
-# --------------------------------------------------
-# CITY EXTRACTOR
-# Fixed: takes only first word after preposition,
-# rejects stopwords, prevents "are"/"any" false matches
-# --------------------------------------------------
 _CITY_STOPWORDS = {
     "me", "the", "a", "an", "all", "my", "this", "that", "data",
     "results", "any", "there", "each", "every", "some", "most",
@@ -255,3 +246,7 @@ def search(request: Request, query: str = Form(...)):
         "index.html",
         {"request": request, "chat": chat, "sources": sources},
     )
+if __name__ == "__main__":
+    
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
