@@ -75,7 +75,7 @@ class RAGSearch:
         print(f"[INFO] Groq LLM initialized: {llm_model}")
 
     # --------------------------------------------------
-    # ROUTER HELPER
+    # ROUTE 1 DETECTOR — CSV
     # --------------------------------------------------
     def is_csv_query(self, query: str) -> bool:
         keywords = [
@@ -86,32 +86,67 @@ class RAGSearch:
         return any(word in query.lower() for word in keywords)
 
     # --------------------------------------------------
-    # MAIN SEARCH METHOD
+    # ROUTE 2 DETECTOR — FAISS context retrieval
+    # Returns context string or empty string if not found
     # --------------------------------------------------
+    def _get_rag_context(self, query: str, top_k: int = 20) -> str:
+        results = self.vectorstore.query(query, top_k=top_k) or []
+
+        if not results:
+            return ""
+
+        # ── Similarity threshold ──────────────────────────
+        # Tune MIN_SCORE based on your FAISS setup.
+        # For cosine similarity: 0.0–1.0 (higher = more similar)
+        # Set USE_THRESHOLD = False if your vector_db has no score key.
+        SCORE_KEY     = "score"   # change to "distance"/"similarity" if needed
+        MIN_SCORE     = 0.30
+        USE_THRESHOLD = True
+
+        if USE_THRESHOLD and results[0].get(SCORE_KEY) is not None:
+            results = [r for r in results if r.get(SCORE_KEY, 0) >= MIN_SCORE]
+
+        if not results:
+            return ""
+
+        texts = [
+            r["metadata"].get("text", "")
+            for r in results
+            if r.get("metadata")
+        ]
+        return "\n\n".join(texts).strip()
+
+    # --------------------------------------------------
+    # ROUTE 3 — Clean "not found" message
+    # Shown when neither CSV nor FAISS can answer the query
+    # --------------------------------------------------
+    def _not_found_response(self, query: str) -> str:
+        print("[INFO] No relevant chunks found — returning not-found message.")
+        return (
+            f"❌  Sorry,this information not found in the documents\n"
+            f"{'─' * 44}\n"
+            f"  \"{query}\"\n\n"
+            f"This topic is not covered in your uploaded documents.\n\n"
+            f"💡 Try:\n"
+            f"  • Rephrasing your question\n"
+            f"  • Asking about topics in the uploaded files\n"
+            f"  • Adding a document that covers this topic"
+        )
     def search_and_summarize(self, query: str, top_k: int = 20) -> str:
-        """Return only the answer string (no suggestions appended here)."""
         if not query.strip():
             return "Please enter a valid question."
 
-        # CSV ROUTE
+        # ── ROUTE 1: CSV ─────────────────────────────────
         if self.is_csv_query(query):
             print("[INFO] Routing to CSV Agent...")
             return self.csv_agent.query(query)
 
-        # RAG ROUTE
+        # ── ROUTE 2: RAG (FAISS) ─────────────────────────
         print("[INFO] Routing to FAISS (RAG)...")
-        results = self.vectorstore.query(query, top_k=top_k) or []
+        context = self._get_rag_context(query, top_k)
 
-        if not results:
-            return "Sorry, this information is not in my documents."
-
-        texts = [r["metadata"].get("text", "") for r in results if r.get("metadata")]
-        context = "\n\n".join(texts)
-
-        if not context.strip():
-            return "Sorry, this information is not in my documents."
-
-        prompt = f"""You are a document-based assistant.
+        if context:
+            prompt = f"""You are a document-based assistant.
 
 Strict Rules:
 - Answer ONLY using the Context below.
@@ -129,20 +164,20 @@ Question:
 {query}
 
 Answer:"""
+            try:
+                response = self.llm.invoke(prompt)
+                return response.content.strip()
+            except Exception as e:
+                print(f"[ERROR] RAG LLM failed: {e}")
+                return "An error occurred while generating the answer."
 
-        try:
-            response = self.llm.invoke(prompt)
-            return response.content.strip()
-        except Exception as e:
-            print(f"[ERROR] LLM failed: {e}")
-            return "An error occurred while generating the answer."
+        # ── ROUTE 3: NOT FOUND ───────────────────────────
+        return self._not_found_response(query)
 
     # --------------------------------------------------
     # GENERATE FOLLOW-UP SUGGESTIONS
-    # Returns a clean list of 4 short questions
     # --------------------------------------------------
     def generate_suggestions(self, question: str, answer: str) -> list[str]:
-        """Return a list of up to 4 follow-up question strings."""
         fallback = [
             "Show top 10 results",
             "How many records are there?",
@@ -170,10 +205,8 @@ Rules:
                 if line.strip()
             ]
 
-            # strip leading "1." / "2." / "- " etc.
             cleaned = []
             for line in lines:
-                # remove numbering like "1. " or "- "
                 stripped = line.lstrip("0123456789.-) ").strip()
                 if len(stripped) > 3:
                     cleaned.append(stripped)
@@ -185,41 +218,6 @@ Rules:
         except Exception as e:
             print(f"[WARN] Suggestion generation failed: {e}")
             return fallback
-
-    # --------------------------------------------------
-    # COMBINED RESPONSE  ← use this in app.py
-    # Returns answer + "---" separator + numbered suggestions
-    # so the frontend chip parser works correctly.
-    # --------------------------------------------------
-    def get_full_response(self, query: str) -> str:
-        """
-        Returns a single string in this format:
-
-            <answer text>
-            ---
-            💡 Suggestions: Here are 4 short follow-up questions:
-            1. <suggestion 1>
-            2. <suggestion 2>
-            3. <suggestion 3>
-            4. <suggestion 4>
-
-        The HTML template's JS parser splits on '---' and builds
-        clickable chips from the numbered lines automatically.
-        """
-        answer = self.search_and_summarize(query)
-        suggestions = self.generate_suggestions(query, answer)
-
-        numbered = "\n".join(
-            f"{i + 1}. {s}" for i, s in enumerate(suggestions)
-        )
-
-        full = (
-            f"{answer}\n"
-            f"------------------------------\n"
-            f"💡 Suggestions: Here are 4 short follow-up questions:\n"
-            f"{numbered}"
-        )
-        return full
 
     # --------------------------------------------------
     # GET SOURCES

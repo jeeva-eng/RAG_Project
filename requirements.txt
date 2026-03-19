@@ -13,7 +13,7 @@ langchain==0.1.16
 langchain-community==0.0.32
 langchain-core==0.1.42
 langchain_groq
-pydantic==2.6.4
+
 
 faiss-cpu
 sentence-transformers==2.7.0

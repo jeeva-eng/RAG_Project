@@ -18,7 +18,7 @@ def build_index():
     )
 
     print("[INFO] Creating FAISS index...")
-    vectorstore.build_from_documents(documents)   # 👈 important
+    vectorstore.build_from_documents(documents)   
 
     print("[INFO] Saving FAISS index...")
     vectorstore.save()
