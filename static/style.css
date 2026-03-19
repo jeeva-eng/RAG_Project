@@ -314,6 +314,14 @@ aside {
   border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 3px;
 }
 
+/* numbers inside bot bubble render in monospace so columns align */
+.msg.bot .bubble span {
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: .82rem;
+  line-height: 1.85;
+  letter-spacing: 0.03em;
+}
+
 /* ── SUGGESTION CHIPS (inside bot bubble) ── */
 .chip-row {
   display: flex;

@@ -39,10 +39,8 @@ sources = rag.get_sources()
 
 
 # --------------------------------------------------
-# HELPERS
+# COLUMN LABEL MAP
 # --------------------------------------------------
-
-# Map raw column names to friendly display names
 COLUMN_LABELS = {
     "customer_zip_code_prefix": "📮 ZIP Code Prefix",
     "customer_city":            "🏙️  City",
@@ -59,32 +57,71 @@ def friendly_label(raw_label: str) -> str:
     return COLUMN_LABELS.get(key, raw_label.replace("_", " ").title())
 
 
+# --------------------------------------------------
+# ANALYTICAL QUERY DETECTOR
+# Detects duplicate/unique/missing queries so they
+# bypass format_answer() and display as-is
+# --------------------------------------------------
+ANALYTICAL_KEYWORDS = [
+    "duplicate", "duplicates", "repeated",
+    "unique", "distinct", "how many different",
+    "missing", "null", "empty", "nan",
+    "most common", "least common", "frequent", "popular",
+]
+
+def is_analytical_query(query: str) -> bool:
+    q = query.lower()
+    return any(kw in q for kw in ANALYTICAL_KEYWORDS)
+
+
+# --------------------------------------------------
+# CITY EXTRACTOR
+# Fixed: takes only first word after preposition,
+# rejects stopwords, prevents "are"/"any" false matches
+# --------------------------------------------------
+_CITY_STOPWORDS = {
+    "me", "the", "a", "an", "all", "my", "this", "that", "data",
+    "results", "any", "there", "each", "every", "some", "most",
+    "list", "customers", "duplicates", "records", "values", "prefix",
+    "count", "rows", "city", "zip", "state", "column", "table",
+    "are", "is", "was", "for", "in", "of", "from", "unique",
+}
+
 def extract_city(query: str) -> str:
-    """Extract city/filter name from the query, e.g. 'for osasco' → 'Osasco'."""
+    """
+    'list zip codes for osasco'      → 'Osasco'
+    'are there any duplicates in zip'→ ''
+    'how many customers in sao paulo'→ 'Sao Paulo'
+    """
     q = query.lower()
     match = re.search(
-        r'\b(?:for|in|of|from)\s+([a-záéíóúãõâêîôûç][a-záéíóúãõâêîôûç\s]{1,30})',
+        r'\b(?:for|in|of|from)\s+([a-záéíóúãõâêîôûç]\w*(?:\s+\w+)?)',
         q
     )
     if match:
-        city = match.group(1).strip().rstrip("?.,")
-        stopwords = {"me", "the", "a", "an", "all", "my", "this", "that", "data", "results"}
-        if city not in stopwords:
+        # take only first word to avoid grabbing extra words
+        city = match.group(1).strip().rstrip("?.,").split()[0]
+        if city not in _CITY_STOPWORDS and len(city) > 2:
             return city.title()
     return ""
 
 
 # --------------------------------------------------
-# ANSWER FORMATTER
+# NUMBER GRID FORMATTER
+# Turns a flat number dump into a clean aligned grid
 # --------------------------------------------------
-def format_answer(raw: str, query: str = "") -> str:
+def format_number_grid(raw: str, query: str = "") -> str:
+    """
+    Input : 'customer_zip_code_prefix 6290 6286 6140 ...'
+    Output: nicely aligned 5-column grid with header & footer
+    """
     text   = raw.strip()
     tokens = text.split()
 
     if len(tokens) < 3:
         return text
 
-    # Split label tokens from number tokens
+    # Separate label words from number tokens
     label_parts  = []
     number_parts = []
     for tok in tokens:
@@ -94,51 +131,61 @@ def format_answer(raw: str, query: str = "") -> str:
             if not number_parts:
                 label_parts.append(tok)
             else:
-                number_parts.append(tok)
+                number_parts.append(tok)  # non-numeric after numbers → keep as-is
 
+    # Not a number grid — return unchanged
     if len(number_parts) < 5:
         return text
 
-    # Friendly column label
-    raw_label = " ".join(label_parts)
-    label     = friendly_label(raw_label)
+    label = friendly_label(" ".join(label_parts))
+    city  = extract_city(query)
 
-    # City from query
-    city = extract_city(query)
+    WIDE  = "━" * 46
+    THIN  = "·" * 46
 
-    # ── Header block ─────────────────────────────────────
-    WIDTH = 44
-    thin  = "·" * WIDTH
-    thick = "━" * WIDTH
-
+    # Header
     if city:
-        city_line  = f"  📍 {city}"
-        header = (
-            f"{thick}\n"
-            f"  {label}\n"
-            f"{city_line}\n"
-            f"{thin}"
-        )
+        header = f"{WIDE}\n  {label}\n  📍 {city}\n{THIN}"
     else:
-        header = (
-            f"{thick}\n"
-            f"  {label}\n"
-            f"{thin}"
-        )
+        header = f"{WIDE}\n  {label}\n{THIN}"
 
-    # ── Number grid: 5 per row ────────────────────────────
+    # Grid — 5 numbers per row, each 7 chars wide
     PER_ROW = 5
     rows = []
     for i in range(0, len(number_parts), PER_ROW):
         chunk = number_parts[i : i + PER_ROW]
+        # right-align each value in a 7-char field, separated by 2 spaces
         rows.append("  ".join(f"{v:>7}" for v in chunk))
 
-    grid = "\n".join(rows)
-
-    # ── Footer ────────────────────────────────────────────
-    footer = f"{thick}\n  ✅ {len(number_parts)} records found"
+    grid   = "\n".join(rows)
+    footer = f"{WIDE}\n  ✅ {len(number_parts)} records found"
 
     return f"{header}\n{grid}\n{footer}"
+
+
+# --------------------------------------------------
+# MAIN ANSWER FORMATTER
+# Routes to grid formatter OR returns text as-is
+# --------------------------------------------------
+def format_answer(raw: str, query: str = "") -> str:
+    text = raw.strip()
+    if not text:
+        return text
+
+    tokens = text.split()
+
+    # Count numeric tokens in first 20 tokens
+    numeric_count = sum(
+        1 for t in tokens[:20]
+        if re.fullmatch(r'\d+(\.\d+)?', t)
+    )
+
+    # If mostly numbers → format as grid
+    if numeric_count >= 5:
+        return format_number_grid(text, query)
+
+    # Otherwise return the text unchanged (RAG answer, analytical result etc.)
+    return text
 
 
 # --------------------------------------------------
@@ -159,11 +206,19 @@ def search(request: Request, query: str = Form(...)):
 
     chat = request.session.get("chat", [])
 
-    # ── ANSWER ─────────────────────────────────────────────
-    raw_answer = rag.search_and_summarize(query)
-    answer     = format_answer(raw_answer, query)
+    # ── GET ANSWER ──────────────────────────────────────────
+    # Analytical queries (duplicates, unique, missing etc.)
+    # → send directly to csv_agent, skip number grid formatter
+    if is_analytical_query(query):
+        raw_answer = rag.csv_agent.query(query)
+        answer = raw_answer.strip() if raw_answer else "No results found."
+    else:
+        # Normal RAG / CSV route
+        raw_answer = rag.search_and_summarize(query)
+        # Only apply grid formatter for number dumps
+        answer = format_answer(raw_answer, query)
 
-    # ── SUGGESTIONS ────────────────────────────────────────
+    # ── GET SUGGESTIONS ─────────────────────────────────────
     suggestions = rag.generate_suggestions(query, answer)
 
     fallbacks = [
@@ -176,7 +231,14 @@ def search(request: Request, query: str = Form(...)):
         suggestions.append(fallbacks[len(suggestions)])
     suggestions = suggestions[:4]
 
-    # ── FINAL RESPONSE ─────────────────────────────────────
+    # ── BUILD FINAL RESPONSE ────────────────────────────────
+    # Format: <answer>
+    #         ------------------------------
+    #         💡 Suggestions:
+    #         1. question
+    #         2. question  ...
+    # JS parser in index.html splits on "---" and builds chips
+    # ────────────────────────────────────────────────────────
     numbered = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(suggestions))
 
     final_answer = (
