@@ -57,12 +57,17 @@ def friendly_label(raw_label: str) -> str:
     return COLUMN_LABELS.get(key, raw_label.replace("_", " ").title())
 
 
-
+# --------------------------------------------------
+# ANALYTICAL QUERY DETECTOR
+# Detects duplicate/unique/missing queries so they
+# bypass format_answer() and display as-is
+# --------------------------------------------------
 ANALYTICAL_KEYWORDS = [
     "duplicate", "duplicates", "repeated",
     "unique", "distinct", "how many different",
     "missing", "null", "empty", "nan",
     "most common", "least common", "frequent", "popular",
+    "any duplicate", "check duplicate", "find duplicate",
 ]
 
 def is_analytical_query(query: str) -> bool:
@@ -70,6 +75,11 @@ def is_analytical_query(query: str) -> bool:
     return any(kw in q for kw in ANALYTICAL_KEYWORDS)
 
 
+# --------------------------------------------------
+# CITY EXTRACTOR
+# Fixed: takes only first word after preposition,
+# rejects stopwords, prevents "are"/"any" false matches
+# --------------------------------------------------
 _CITY_STOPWORDS = {
     "me", "the", "a", "an", "all", "my", "this", "that", "data",
     "results", "any", "there", "each", "every", "some", "most",

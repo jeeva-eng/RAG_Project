@@ -59,33 +59,63 @@ class CSVAgent:
     # HANDLER: DUPLICATES
     # ──────────────────────────────────────────────────
     def _handle_duplicates(self, q: str) -> str:
-        col = self._detect_column(q)
+        col  = self._detect_column(q)
+        city = self._extract_city(q)
+
+        # Apply city filter if present
+        df = self.df
+        city_label = ""
+        if city:
+            df = df[df["customer_city"].str.lower() == city]
+            if df.empty:
+                return f"No data found for city: {city.title()}"
+            city_label = f" — {city.title()}"
 
         if col:
-            dupes = self.df[self.df.duplicated(subset=[col], keep=False)]
-            if dupes.empty:
-                return f"✅ No duplicate values found in '{col}'."
-            count = self.df[col].duplicated().sum()
+            WIDE = "━" * 46
+            THIN = "·" * 46
+
+            total_rows  = len(df)
+            dupe_count  = df[col].duplicated().sum()
+            unique_vals = df[col].nunique()
+
+            if dupe_count == 0:
+                return (
+                    f"{WIDE}\n"
+                    f"  🔁 Duplicates in '{col}'{city_label}\n"
+                    f"{THIN}\n"
+                    f"  ✅ No duplicate values found\n"
+                    f"  Total rows   : {total_rows}\n"
+                    f"  Unique values: {unique_vals}\n"
+                    f"{WIDE}"
+                )
+
+            # Show which values are duplicated and how many times
             top = (
-                self.df[col]
+                df[col]
                 .value_counts()
                 .where(lambda x: x > 1)
                 .dropna()
                 .astype(int)
-                .head(10)
+                .head(15)
             )
-            lines = [f"  {v:<30} → {c} times" for v, c in top.items()]
+            lines = [f"  {str(v):<12} → appears {c:>4} times" for v, c in top.items()]
+
             return (
-                f"🔁 Duplicates in '{col}'\n"
-                f"{'─' * 44}\n"
-                f"  Total duplicate rows : {count}\n"
-                f"  Unique values duped  : {len(top)}\n"
-                f"{'─' * 44}\n"
-                + "\n".join(lines)
+                f"{WIDE}\n"
+                f"  🔁 Duplicates in '{col}'{city_label}\n"
+                f"{THIN}\n"
+                f"  Total rows        : {total_rows}\n"
+                f"  Duplicate rows    : {dupe_count}\n"
+                f"  Unique values     : {unique_vals}\n"
+                f"{THIN}\n"
+                f"  Duplicated values:\n"
+                + "\n".join(lines) + "\n"
+                + f"{WIDE}"
             )
 
-        # No specific column → check entire dataframe
-        total_dupes = self.df.duplicated().sum()
+        # No column specified → check whole dataframe
+        total_dupes = df.duplicated().sum()
         if total_dupes == 0:
             return "✅ No duplicate rows found in the dataset."
         return (
@@ -319,23 +349,40 @@ Answer this question about the data clearly in 3-5 lines:
         return ""
 
     def _extract_city(self, q: str) -> str:
-        """Extract city name from query — returns lowercase string or empty."""
-        # pattern: "for <city>", "in <city>", "of <city>", "from <city>"
+        """
+        Extract city name from query.
+        Works with AND without prepositions:
+          'list zip for osasco'              → 'osasco'
+          'duplicates in zip osasco'         → 'osasco'
+          'are there duplicates osasco'      → 'osasco'
+        Strategy: check every word in the query against
+        actual city names in the dataset.
+        """
+        cities = set(self.df["customer_city"].str.lower().unique())
+
+        stopwords = {
+            "me", "the", "a", "an", "all", "my", "this", "that",
+            "any", "there", "each", "every", "some", "most",
+            "list", "customers", "duplicates", "duplicate", "records",
+            "values", "prefix", "count", "rows", "city", "zip", "state",
+            "column", "table", "data", "results", "unique", "for", "in",
+            "of", "from", "are", "is", "show", "give", "find", "get",
+            "customer", "zip_code", "customer_zip_code_prefix",
+        }
+
+        # First try: word after preposition (most specific)
         match = re.search(r'\b(?:for|in|of|from)\s+(\w+)', q)
         if match:
             word = match.group(1).strip("?.,").lower()
-            stopwords = {
-                "me", "the", "a", "an", "all", "my", "this", "that",
-                "any", "there", "each", "every", "some", "most",
-                "list", "customers", "duplicates", "records", "values",
-                "prefix", "count", "rows", "city", "zip", "state",
-                "column", "table", "data", "results", "unique", "each"
-            }
-            if word not in stopwords and len(word) > 2:
-                # verify it's actually a city in the data
-                cities = self.df["customer_city"].str.lower().unique()
-                if word in cities:
-                    return word
+            if word not in stopwords and word in cities:
+                return word
+
+        # Second try: any word in query that is a known city
+        words = re.findall(r'[a-záéíóúãõâêîôûç]+', q)
+        for word in words:
+            if word not in stopwords and len(word) > 2 and word in cities:
+                return word
+
         return ""
 
     def _extract_number(self, q: str) -> int:
