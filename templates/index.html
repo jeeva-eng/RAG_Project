@@ -6,6 +6,55 @@
 <title>RAG Document Assistant</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
+<style>
+  /* ── Tables inside bot bubble ── */
+  .bot-bubble table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0 14px;
+    font-size: .8rem;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .bot-bubble table thead tr {
+    background: rgba(124,106,255,0.18);
+    color: #c4b8ff;
+    text-align: left;
+  }
+  .bot-bubble table th {
+    padding: 8px 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    font-size: .7rem;
+    border-bottom: 1px solid rgba(124,106,255,0.3);
+  }
+  .bot-bubble table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    color: #e6e8f0;
+  }
+  .bot-bubble table tbody tr:hover {
+    background: rgba(255,255,255,0.04);
+  }
+  /* zip grid - compact cells */
+  .bot-bubble table.zip-grid td {
+    font-family: 'Courier New', monospace;
+    font-size: .8rem;
+    color: #4fffb0;
+    padding: 5px 10px;
+    text-align: center;
+    border: 1px solid rgba(79,255,176,0.1);
+    background: rgba(79,255,176,0.04);
+    border-radius: 4px;
+  }
+  /* paragraph spacing inside bubble */
+  .bot-bubble p {
+    margin: 0 0 10px;
+    line-height: 1.7;
+  }
+  .bot-bubble p:last-child { margin-bottom: 0; }
+  .bot-bubble strong { color: #e6e8f0; font-weight: 600; }
+</style>
 </head>
 <body>
 
@@ -47,7 +96,7 @@
       <div class="empty">
         <div class="empty-icon">💬</div>
         <h2>Ask your documents anything</h2>
-        <p>Query PDFs, CSVs, Excel files in plain English </p>
+        <p>Query PDFs, CSVs, Excel files in plain English</p>
       </div>
       {% endif %}
 
@@ -59,7 +108,7 @@
         <div class="bubble">{{ message.user }}</div>
       </div>
 
-      <!-- Bot bubble — raw text stored in data-raw, parsed by JS below -->
+      <!-- Bot bubble -->
       <div class="msg bot">
         <div class="meta"><div class="av">🤖</div> Assistant</div>
         <div class="bubble bot-bubble" data-raw="{{ message.bot | e }}"></div>
@@ -87,66 +136,83 @@
       <p class="hint">Press <kbd>Enter</kbd> to send</p>
     </div>
 
-  </div><!-- /.chat-wrap -->
-</div><!-- /.app -->
+  </div>
+</div>
 
 <script>
-/* ── Parse every bot bubble ──────────────────────────────────────
-   Each bubble stores the raw response text in data-raw.
-   We split on "---" to separate the answer from suggestions,
-   then render chips inside the same bubble — no extra boxes.
-──────────────────────────────────────────────────────────────── */
-document.querySelectorAll('.bot-bubble').forEach(function (bubble) {
+/* renderText(text)
+   Converts plain text with **bold** markers to safe HTML */
+function renderText(text) {
+  return text
+    .replace(/&/g,  '&amp;')
+    .replace(/</g,  '&lt;')
+    .replace(/>/g,  '&gt;')
+    .replace(/\*\*(.*?)\*\*/g,
+      '<strong>$1</strong>');
+}
+
+/* Parse every bot bubble:
+   - If response starts with HTML comment tag: inject as HTML
+   - Otherwise: plain text with bold support
+   - Always parse suggestion chips from separator */
+document.querySelectorAll('.bot-bubble').forEach(function(bubble) {
+
   var raw = bubble.getAttribute('data-raw') || '';
 
-  /* decode HTML entities that Jinja's |e filter added */
-  var txt = document.createElement('textarea');
-  txt.innerHTML = raw;
-  var decoded = txt.value;
+  /* decode Jinja escape entities */
+  var area = document.createElement('textarea');
+  area.innerHTML = raw;
+  var decoded = area.value;
 
-  /* split answer from suggestions */
-  var sepIdx = decoded.indexOf('---');
+  /* split answer from suggestions on "---" */
+  var sepIdx   = decoded.indexOf('---');
   var mainText = sepIdx !== -1 ? decoded.substring(0, sepIdx).trim() : decoded.trim();
   var afterSep = sepIdx !== -1 ? decoded.substring(sepIdx) : '';
 
-  /* render main answer */
-  var answerEl = document.createElement('span');
-  answerEl.style.whiteSpace = 'pre-wrap';
-  answerEl.textContent = mainText;
+  /* render answer */
+  var answerEl = document.createElement('div');
+
+  if (mainText.startsWith('<!--HTML-->')) {
+    /* HTML response from csv_agent - inject directly */
+    answerEl.innerHTML = mainText.replace('<!--HTML-->', '').trim();
+  } else {
+    /* plain text - preserve newlines, render **bold** */
+    answerEl.style.whiteSpace = 'pre-wrap';
+    answerEl.innerHTML = renderText(mainText);
+  }
+
   bubble.appendChild(answerEl);
 
-  /* extract suggestion chips */
+  /* suggestion chips */
   if (afterSep) {
     var rest = afterSep.replace(/-+/g, '').trim();
-    rest = rest.replace(/^.*?Suggestions\s*:/i, '').trim();
+    rest = rest.replace(/^.*?Suggestions\s*:/i,         '').trim();
     rest = rest.replace(/^.*?follow-up questions\s*:/i, '').trim();
 
-    /* split on "1." / "2.1." / "3." style numbering */
-    var parts = rest.split(/\d+\.?\d*\.\s+/).filter(function (s) {
+    var parts = rest.split(/\d+\.?\d*\.\s+/).filter(function(s) {
       return s.trim().length > 3;
     });
-    var chips = parts.map(function (s) {
-      return s.trim().replace(/\s*$/, '').replace(/\?*$/, '?');
+    var chips = parts.map(function(s) {
+      return s.trim().replace(/\?*$/, '?');
     });
 
     if (chips.length > 0) {
       var row = document.createElement('div');
       row.className = 'chip-row';
 
-      var label = document.createElement('div');
-      label.className = 'chip-label';
-      label.textContent = '💡 Follow-up';
-      row.appendChild(label);
+      var lbl = document.createElement('div');
+      lbl.className   = 'chip-label';
+      lbl.textContent = 'Follow-up suggestions';
+      row.appendChild(lbl);
 
-      chips.forEach(function (text) {
-        var btn = document.createElement('button');
+      chips.forEach(function(chipText) {
+        var btn       = document.createElement('button');
         btn.className = 'chip';
-        btn.textContent = text;
+        btn.textContent = chipText;
         btn.type = 'button';
-        btn.addEventListener('click', function () {
-          var inp = document.querySelector('.input-row input');
-          inp.value = text;
-          inp.focus();
+        btn.addEventListener('click', function() {
+          document.querySelector('.input-row input').value = chipText;
+          document.querySelector('.input-row input').focus();
         });
         row.appendChild(btn);
       });
@@ -155,13 +221,11 @@ document.querySelectorAll('.bot-bubble').forEach(function (bubble) {
     }
   }
 
-  /* remove the data attribute — keep DOM clean */
   bubble.removeAttribute('data-raw');
 });
 
-/* ── Auto-scroll to latest message ── */
-var box = document.getElementById('chat-box');
-box.scrollTop = box.scrollHeight;
+/* auto-scroll to bottom */
+document.getElementById('chat-box').scrollTop = 9999999;
 </script>
 
 </body>

@@ -1,6 +1,6 @@
 import os
 import re
-import uvicorn
+
 from fastapi import FastAPI, Request, Form
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -211,12 +211,16 @@ def search(request: Request, query: str = Form(...)):
     # Analytical queries (duplicates, unique, missing etc.)
     # → send directly to csv_agent, skip number grid formatter
     if is_analytical_query(query):
+        # analytical: duplicates, unique, missing etc.
+        raw_answer = rag.csv_agent.query(query)
+        answer = raw_answer.strip() if raw_answer else "No results found."
+    elif any(k in query.lower() for k in ["show", "list", "zip", "zips"]):
+        # list/zip queries → csv_agent returns multi-section text → show as-is
         raw_answer = rag.csv_agent.query(query)
         answer = raw_answer.strip() if raw_answer else "No results found."
     else:
-        # Normal RAG / CSV route
+        # Normal RAG route
         raw_answer = rag.search_and_summarize(query)
-        # Only apply grid formatter for number dumps
         answer = format_answer(raw_answer, query)
 
     # ── GET SUGGESTIONS ─────────────────────────────────────
@@ -256,7 +260,3 @@ def search(request: Request, query: str = Form(...)):
         "index.html",
         {"request": request, "chat": chat, "sources": sources},
     )
-if __name__ == "__main__":
-    
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)

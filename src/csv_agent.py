@@ -62,73 +62,45 @@ class CSVAgent:
         col  = self._detect_column(q)
         city = self._extract_city(q)
 
-        # Apply city filter if present
         df = self.df
-        city_label = ""
+        city_label = city.title() if city else None
         if city:
             df = df[df["customer_city"].str.lower() == city]
             if df.empty:
-                return f"No data found for city: {city.title()}"
-            city_label = f" — {city.title()}"
+                return f"<p>No data found for city <strong>{city.title()}</strong>.</p>"
 
         if col:
-            WIDE = "━" * 46
-            THIN = "·" * 46
-
             total_rows  = len(df)
-            dupe_count  = df[col].duplicated().sum()
+            dupe_count  = int(df[col].duplicated().sum())
             unique_vals = df[col].nunique()
+            city_phrase = f" in <strong>{city_label}</strong>" if city_label else ""
 
             if dupe_count == 0:
-                return (
-                    f"{WIDE}\n"
-                    f"  🔁 Duplicates in '{col}'{city_label}\n"
-                    f"{THIN}\n"
-                    f"  ✅ No duplicate values found\n"
-                    f"  Total rows   : {total_rows}\n"
-                    f"  Unique values: {unique_vals}\n"
-                    f"{WIDE}"
-                )
+                return f"<p>✅ Great news! There are <strong>no duplicate values</strong> in the column <strong>{col}</strong>{city_phrase}. All <strong>{unique_vals}</strong> values are unique across <strong>{total_rows}</strong> rows.</p>"
 
-            # Show which values are duplicated and how many times
             top = (
-                df[col]
-                .value_counts()
-                .where(lambda x: x > 1)
-                .dropna()
-                .astype(int)
-                .head(15)
+                df[col].value_counts()
+                .where(lambda x: x > 1).dropna().astype(int).head(15)
             )
-            lines = [f"  {str(v):<12} → appears {c:>4} times" for v, c in top.items()]
-
-            return (
-                f"{WIDE}\n"
-                f"  🔁 Duplicates in '{col}'{city_label}\n"
-                f"{THIN}\n"
-                f"  Total rows        : {total_rows}\n"
-                f"  Duplicate rows    : {dupe_count}\n"
-                f"  Unique values     : {unique_vals}\n"
-                f"{THIN}\n"
-                f"  Duplicated values:\n"
-                + "\n".join(lines) + "\n"
-                + f"{WIDE}"
+            dupe_rows = "".join(
+                f"<tr><td>{v}</td><td>{c}</td><td>{c-1} extra</td></tr>"
+                for v, c in top.items()
             )
+            pct = round(dupe_count / total_rows * 100, 1)
+            return f"""<!--HTML-->
+<p>Here is the duplicate analysis for <strong>{col}</strong>{city_phrase}.</p>
+<p>Out of <strong>{total_rows} total rows</strong>, there are <strong>{dupe_count} duplicate entries</strong> ({pct}% of the data). These duplicates are spread across <strong>{len(top)} distinct values</strong>. Removing them would leave <strong>{unique_vals} unique values</strong>.</p>
+<p><strong>🔁 Top Duplicated Values</strong></p>
+<table>
+  <thead><tr><th>{col}</th><th>Count</th><th>Duplicates</th></tr></thead>
+  <tbody>{dupe_rows}</tbody>
+</table>
+<p>Consider deduplicating this column if you need unique records for analysis or reporting.</p>"""
 
-        # No column specified → check whole dataframe
-        total_dupes = df.duplicated().sum()
+        total_dupes = int(self.df.duplicated().sum())
         if total_dupes == 0:
-            return "✅ No duplicate rows found in the dataset."
-        return (
-            f"🔁 Duplicate Rows Found\n"
-            f"{'─' * 44}\n"
-            f"  Total duplicate rows: {total_dupes}\n"
-            f"  Total rows          : {len(self.df)}\n"
-            f"  Unique rows         : {len(self.df) - total_dupes}"
-        )
-
-    # ──────────────────────────────────────────────────
-    # HANDLER: UNIQUE / DISTINCT
-    # ──────────────────────────────────────────────────
+            return "<p>✅ The dataset has <strong>no duplicate rows</strong>. All records are unique.</p>"
+        return f"<p>The dataset contains <strong>{total_dupes} fully duplicate rows</strong> out of <strong>{len(self.df)}</strong> total rows ({round(total_dupes/len(self.df)*100,1)}%). Consider removing them for cleaner analysis.</p>"
     def _handle_unique(self, q: str) -> str:
         col = self._detect_column(q)
         city = self._extract_city(q)
@@ -200,26 +172,29 @@ class CSVAgent:
     # HANDLER: MOST / LEAST COMMON
     # ──────────────────────────────────────────────────
     def _handle_frequency(self, q: str) -> str:
-        col = self._detect_column(q)
-        n = self._extract_number(q) or 10
+        col   = self._detect_column(q)
+        n     = self._extract_number(q) or 5
         least = "least" in q
 
         if not col:
-            col = "customer_city"  # sensible default
+            col = "customer_city"
 
         counts = self.df[col].value_counts()
-        if least:
-            counts = counts.tail(n)
-            label = f"🔻 Least Common — '{col}'"
-        else:
-            counts = counts.head(n)
-            label = f"🔝 Most Common — '{col}'"
 
-        lines = [f"  {str(v):<30} {c:>6}" for v, c in counts.items()]
+        if least:
+            top    = counts.tail(n)
+            intro  = f"The **{n} least common** values in **{col}** are:"
+        else:
+            top    = counts.head(n)
+            intro  = f"The **{n} most common** values in **{col}** are:"
+
+        parts = [f"**{v}** ({c} times)" for v, c in top.items()]
+        result = ", ".join(parts[:-1]) + f", and {parts[-1]}" if len(parts) > 1 else parts[0]
+
+        total_unique = self.df[col].nunique()
         return (
-            f"{label}\n"
-            f"{'─' * 44}\n"
-            + "\n".join(lines)
+            f"{intro} {result}. "
+            f"In total there are **{total_unique} unique values** in this column across the entire dataset."
         )
 
     # ──────────────────────────────────────────────────
@@ -230,32 +205,38 @@ class CSVAgent:
         col  = self._detect_column(q)
 
         if city:
-            count = len(self.df[self.df["customer_city"].str.lower() == city])
-            return (
-                f"🔢 Customer Count — {city.title()}\n"
-                f"{'─' * 44}\n"
-                f"  Total customers: {count}"
-            )
+            df    = self.df[self.df["customer_city"].str.lower() == city]
+            count = len(df)
+            pct   = round(count / len(self.df) * 100, 2)
+            state = df["customer_state"].value_counts().idxmax() if "customer_state" in df.columns and not df.empty else ""
+            state_txt = f" in the state of <strong>{state}</strong>" if state else ""
+            return f"""<!--HTML-->
+<p>There are <strong>{count} customers</strong> registered in <strong>{city.title()}</strong>{state_txt}.</p>
+<table>
+  <thead><tr><th>City</th><th>Total Customers</th><th>% of Dataset</th></tr></thead>
+  <tbody><tr><td>{city.title()}</td><td>{count}</td><td>{pct}%</td></tr></tbody>
+</table>
+<p>This means <strong>{city.title()}</strong> represents <strong>{pct}%</strong> of all <strong>{len(self.df)}</strong> customers in the dataset.</p>"""
 
         if col:
-            return (
-                f"🔢 Count — '{col}'\n"
-                f"{'─' * 44}\n"
-                f"  Non-null rows : {self.df[col].count()}\n"
-                f"  Total rows    : {len(self.df)}"
-            )
+            non_null = int(self.df[col].count())
+            total    = len(self.df)
+            missing  = total - non_null
+            miss_txt = f" There are also <strong>{missing} missing values</strong> that may need attention." if missing > 0 else " There are <strong>no missing values</strong> in this column."
+            return f"<p>The column <strong>{col}</strong> has <strong>{non_null} non-null records</strong> out of <strong>{total} total rows</strong>.{miss_txt}</p>"
 
-        return (
-            f"🔢 Dataset Size\n"
-            f"{'─' * 44}\n"
-            f"  Total rows    : {len(self.df)}\n"
-            f"  Total columns : {len(self.df.columns)}\n"
-            f"  Columns: {', '.join(self.df.columns.tolist())}"
+        total = len(self.df)
+        cols  = self.df.columns.tolist()
+        col_rows = "".join(
+            f"<tr><td>{c}</td><td>{self.df[c].dtype}</td><td>{self.df[c].nunique()}</td><td>{self.df[c].isnull().sum()}</td></tr>"
+            for c in cols
         )
-
-    # ──────────────────────────────────────────────────
-    # HANDLER: AGGREGATION (avg, sum)
-    # ──────────────────────────────────────────────────
+        return f"""<!--HTML-->
+<p>The dataset contains <strong>{total} rows</strong> and <strong>{len(cols)} columns</strong>. Here is a full summary of each column:</p>
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Unique Values</th><th>Missing</th></tr></thead>
+  <tbody>{col_rows}</tbody>
+</table>"""
     def _handle_aggregation(self, q: str) -> str:
         col = self._detect_column(q)
         numeric_cols = self.df.select_dtypes(include="number").columns.tolist()
@@ -288,25 +269,153 @@ class CSVAgent:
         col  = self._detect_column(q)
         city = self._extract_city(q)
 
-        # default column if none detected
         if not col:
             col = "customer_zip_code_prefix"
 
         df = self.df
+        city_label = city.title() if city else "the dataset"
+
         if city:
             df = df[df["customer_city"].str.lower() == city]
             if df.empty:
-                return f"No data found for city: {city}"
+                return f"<p>I could not find any records for <strong>{city.title()}</strong>. Please check the city name and try again.</p>"
 
         if col not in df.columns:
-            return f"Column '{col}' not found in dataset."
+            return f"<p>The column <strong>{col}</strong> was not found in the dataset.</p>"
 
-        values = df[col].drop_duplicates().dropna().tolist()
-        return " ".join(str(v) for v in values)  # let format_answer() handle grid
+        # ── stats ──────────────────────────────────────────────
+        unique_zips  = sorted(df[col].drop_duplicates().dropna().tolist())
+        total_cust   = len(df)
+        total_ds     = len(self.df)
+        pct_of_ds    = round(total_cust / total_ds * 100, 2)
+        avg_per_zip  = round(total_cust / len(unique_zips), 1) if unique_zips else 0
+        vc           = df[col].value_counts()
+        top_zip      = vc.idxmax()
+        top_count    = int(vc.max())
+        low_zip      = vc.idxmin()
+        low_count    = int(vc.min())
+        median_count = round(float(vc.median()), 1)
+        above_avg    = int((vc >= avg_per_zip).sum())
 
-    # ──────────────────────────────────────────────────
-    # LLM FALLBACK
-    # ──────────────────────────────────────────────────
+        top5_text = ", ".join(
+            f"<strong>{z}</strong> ({c} customers)" for z, c in vc.head(5).items()
+        )
+
+        state_line = ""
+        if "customer_state" in df.columns and not df.empty:
+            states = df["customer_state"].value_counts()
+            if len(states) == 1:
+                state_line = f"All {total_cust} customers are registered under the state of <strong>{states.index[0]}</strong>."
+            else:
+                parts = [f"<strong>{s}</strong> ({c} customers, {round(c/total_cust*100,1)}%)" for s, c in states.items()]
+                state_line = "Customers are spread across: " + ", ".join(parts) + "."
+
+        # ── PARAGRAPH 1: city overview ─────────────────────────
+        p1 = f"""<p>
+Here is a complete analysis of ZIP code data for <strong>{city_label}</strong>.
+The city has <strong>{total_cust} registered customers</strong>, which accounts for
+<strong>{pct_of_ds}%</strong> of the entire dataset containing {total_ds:,} records.
+These customers are distributed across <strong>{len(unique_zips)} unique ZIP code prefixes</strong>,
+with an average of <strong>{avg_per_zip} customers per ZIP code</strong>.
+{state_line}
+</p>"""
+
+        # ── PARAGRAPH 2: distribution analysis ────────────────
+        p2 = f"""<p>
+The ZIP code distribution in <strong>{city_label}</strong> is <em>not uniform</em>.
+The most densely populated zone is ZIP <strong>{top_zip}</strong>,
+which alone accounts for <strong>{top_count} customers</strong>
+({round(top_count/total_cust*100,1)}% of the city total).
+At the other extreme, ZIP <strong>{low_zip}</strong> has only
+<strong>{low_count} customer(s)</strong>, showing that some postal zones
+are sparsely covered. The median customer count per ZIP is
+<strong>{median_count}</strong>, and <strong>{above_avg} out of {len(unique_zips)}</strong>
+ZIP codes have at or above the average number of customers.
+The top 5 most active zones are: {top5_text}.
+</p>"""
+
+        # ── TABLE 1: Top 10 with rank, count, share, bar ───────
+        top10 = (
+            df.groupby(col).size()
+            .reset_index(name="Customers")
+            .sort_values("Customers", ascending=False)
+            .head(10)
+            .reset_index(drop=True)
+        )
+        top10_rows = ""
+        for i, row in top10.iterrows():
+            rank    = i + 1
+            z       = row[col]
+            c       = int(row["Customers"])
+            share   = round(c / total_cust * 100, 1)
+            bar     = "&#9608;" * min(c, 10)
+            medal   = ["🥇","🥈","🥉"][i] if i < 3 else f"#{rank}"
+            top10_rows += f"<tr><td>{medal}</td><td><strong>{z}</strong></td><td>{c}</td><td>{share}%</td><td style='color:#4fffb0;letter-spacing:2px'>{bar}</td></tr>"
+
+        table1_intro = f"""<p>
+The table below ranks the <strong>Top 10 ZIP codes</strong> in <strong>{city_label}</strong>
+by customer count. Together, these 10 ZIP codes account for
+<strong>{sum(top10['Customers'])} customers</strong>
+({round(sum(top10['Customers'])/total_cust*100,1)}% of the city total),
+highlighting where the majority of the population is concentrated.
+</p>"""
+
+        table1 = f"""<table>
+  <thead>
+    <tr><th>Rank</th><th>ZIP Code</th><th>Customers</th><th>City Share</th><th>Activity</th></tr>
+  </thead>
+  <tbody>{top10_rows}</tbody>
+</table>"""
+
+        table1_after = f"""<p>
+As seen above, the top 3 ZIP codes (<strong>{top10.iloc[0][col]}</strong>,
+<strong>{top10.iloc[1][col]}</strong>, <strong>{top10.iloc[2][col]}</strong>)
+together hold <strong>{sum(top10.head(3)['Customers'])} customers</strong>,
+representing <strong>{round(sum(top10.head(3)['Customers'])/total_cust*100,1)}%</strong>
+of all customers in <strong>{city_label}</strong>.
+This concentration suggests these zones are likely commercial or
+high-density residential areas.
+</p>"""
+
+        # ── PARAGRAPH before zip grid ──────────────────────────
+        p3 = f"""<p>
+The table below lists all <strong>{len(unique_zips)} unique ZIP code prefixes</strong>
+active in <strong>{city_label}</strong>.
+Each cell represents one postal zone with at least one registered customer.
+ZIP codes with fewer customers may represent rural outskirts or newly
+developed areas with lower population density.
+</p>"""
+
+        # ── TABLE 2: ZIP grid 6 per row ────────────────────────
+        zip_trs = ""
+        for i in range(0, len(unique_zips), 6):
+            chunk = unique_zips[i:i+6]
+            # pad row to always have 6 cells
+            while len(chunk) < 6:
+                chunk.append("")
+            zip_trs += "<tr>" + "".join(
+                f"<td>{z}</td>" if z else "<td style='background:transparent;border:none;'></td>"
+                for z in chunk
+            ) + "</tr>"
+
+        table2 = f"""<table class="zip-grid">
+  <tbody>{zip_trs}</tbody>
+</table>"""
+
+        # ── PARAGRAPH 4: closing summary ──────────────────────
+        p4 = f"""<p>
+In summary, <strong>{city_label}</strong> is a city with
+<strong>{total_cust} customers</strong> distributed across
+<strong>{len(unique_zips)} ZIP code prefixes</strong>.
+The customer base is moderately concentrated, with the top 10 ZIP codes
+covering <strong>{round(sum(top10['Customers'])/total_cust*100,1)}%</strong>
+of the population and the remaining
+<strong>{len(unique_zips)-10} ZIP codes</strong> sharing the rest.
+This data is useful for optimising delivery routes, identifying
+high-value service zones, and planning regional marketing campaigns.
+</p>"""
+
+        return "<!--HTML-->" + p1 + p2 + table1_intro + table1 + table1_after + p3 + table2 + p4
     def _llm_fallback(self, question: str) -> str:
         schema = ", ".join(self.df.columns.tolist())
         sample = self.df.head(3).to_string(index=False)
